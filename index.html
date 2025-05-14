@@ -109,7 +109,9 @@
         // Initialize Supabase client
         const SUPABASE_URL = 'https://bzagepvymwyxvohfkzob.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6YWdlcHZ5bXd5eHZvaGZrem9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzAwMjk4NzUsImV4cCI6MTk4NTYwNTg3NX0.SZHqIWKbpDev_QPT2jGiWUqTpBYUqEA7gaI6J2M34cI';
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // Fixed: Create the Supabase client correctly
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         // IMPORTANT: Log all URL info to debug
         console.log('Page URL:', window.location.href);
