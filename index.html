@@ -69,6 +69,18 @@
             margin-top: 10px;
             text-align: center;
         }
+        .debug {
+            color: #888;
+            margin-top: 10px;
+            text-align: left;
+            font-size: 12px;
+            word-break: break-all;
+            max-height: 100px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            padding: 5px;
+            margin-top: 20px;
+        }
         .loader {
             border: 4px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
@@ -103,6 +115,8 @@
             </div>
             <button class="btn" onclick="resetPassword()">Reset Password</button>
         </div>
+        
+        <div id="debugInfo" class="debug"></div>
     </div>
 
     <script>
@@ -110,33 +124,75 @@
         const SUPABASE_URL = 'https://bzagepvymwyxvohfkzob.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6YWdlcHZ5bXd5eHZvaGZrem9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzAwMjk4NzUsImV4cCI6MTk4NTYwNTg3NX0.SZHqIWKbpDev_QPT2jGiWUqTpBYUqEA7gaI6J2M34cI';
         
-        // Fixed: Create the Supabase client correctly
+        // Create the Supabase client correctly
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // IMPORTANT: Log all URL info to debug
-        console.log('Page URL:', window.location.href);
-        console.log('Hash:', window.location.hash);
-        console.log('Search params:', window.location.search);
+        // Debug function to display info
+        function debugLog(message) {
+            console.log(message);
+            const debugElement = document.getElementById('debugInfo');
+            debugElement.innerHTML += message + '<br>';
+        }
 
-        // Extract token and type from URL
-        function getFragmentParams() {
-            // First check hash fragment
-            const hash = window.location.hash.substring(1);
-            if (hash) {
-                const params = new URLSearchParams(hash);
-                console.log('Hash params:', Object.fromEntries(params.entries()));
-                return params;
+        // DISPLAY ENTIRE URL FOR DEBUGGING
+        debugLog('Full URL: ' + window.location.href);
+        debugLog('Hash: ' + window.location.hash);
+        debugLog('Search: ' + window.location.search);
+        
+        // Try to parse any token from ANY part of the URL
+        function getAllPossibleTokens() {
+            const result = {
+                hashParams: new URLSearchParams(window.location.hash.substring(1)),
+                searchParams: new URLSearchParams(window.location.search),
+                rawUrl: window.location.href,
+                possibleTokens: []
+            };
+            
+            // Check for tokens in hash
+            if (result.hashParams.has('access_token')) {
+                result.possibleTokens.push({
+                    type: 'access_token',
+                    source: 'hash',
+                    value: result.hashParams.get('access_token')
+                });
             }
             
-            // Then check search parameters
-            const search = window.location.search.substring(1);
-            if (search) {
-                const params = new URLSearchParams(search);
-                console.log('Search params:', Object.fromEntries(params.entries()));
-                return params;
+            if (result.hashParams.has('token')) {
+                result.possibleTokens.push({
+                    type: 'token',
+                    source: 'hash',
+                    value: result.hashParams.get('token')
+                });
             }
             
-            return new URLSearchParams();
+            // Check for tokens in search params
+            if (result.searchParams.has('access_token')) {
+                result.possibleTokens.push({
+                    type: 'access_token',
+                    source: 'search',
+                    value: result.searchParams.get('access_token')
+                });
+            }
+            
+            if (result.searchParams.has('token')) {
+                result.possibleTokens.push({
+                    type: 'token',
+                    source: 'search',
+                    value: result.searchParams.get('token')
+                });
+            }
+            
+            // Look for token in full URL string (sometimes it's embedded differently)
+            const tokenMatch = result.rawUrl.match(/token=([^&]+)/);
+            if (tokenMatch && tokenMatch[1]) {
+                result.possibleTokens.push({
+                    type: 'token',
+                    source: 'raw_url_match',
+                    value: tokenMatch[1]
+                });
+            }
+            
+            return result;
         }
 
         // Reset password function
@@ -172,69 +228,75 @@
             }
             
             try {
-                const params = getFragmentParams();
+                // Get all possible tokens and log them for debugging
+                const tokenInfo = getAllPossibleTokens();
+                debugLog('Found ' + tokenInfo.possibleTokens.length + ' possible tokens');
+                tokenInfo.possibleTokens.forEach(token => {
+                    debugLog(`Token type: ${token.type}, source: ${token.source}`);
+                });
                 
-                // Log what we found
-                console.log('Processing password reset with params found');
+                // First, try to directly update password
+                debugLog('Attempting direct password update...');
+                let result = await supabase.auth.updateUser({ password });
                 
-                // Look for tokens in different forms
-                const accessToken = params.get('access_token');
-                const refreshToken = params.get('refresh_token');
-                const recoveryToken = params.get('token');
-                const type = params.get('type') || 'recovery';
-                
-                console.log('Access token:', accessToken ? 'Found' : 'Not found');
-                console.log('Refresh token:', refreshToken ? 'Found' : 'Not found');
-                console.log('Recovery token:', recoveryToken ? 'Found' : 'Not found');
-                console.log('Type:', type);
-                
-                let result;
-                
-                // If we have an access token
-                if (accessToken) {
-                    console.log('Setting session with access token');
+                if (result.error) {
+                    debugLog('Direct update failed: ' + result.error.message);
                     
-                    // Set the session
-                    const { data: session, error: sessionError } = await supabase.auth.setSession({
-                        access_token: accessToken,
-                        refresh_token: refreshToken || ''
-                    });
-                    
-                    if (sessionError) {
-                        throw new Error('Failed to set session: ' + sessionError.message);
+                    // If direct update fails, try each token
+                    for (const token of tokenInfo.possibleTokens) {
+                        debugLog(`Trying with token of type ${token.type} from ${token.source}`);
+                        
+                        if (token.type === 'access_token') {
+                            // Try setting session with access token
+                            debugLog('Setting session with access token');
+                            const refreshToken = tokenInfo.hashParams.get('refresh_token') || '';
+                            
+                            const { data: session, error: sessionError } = await supabase.auth.setSession({
+                                access_token: token.value,
+                                refresh_token: refreshToken
+                            });
+                            
+                            if (sessionError) {
+                                debugLog('Session set failed: ' + sessionError.message);
+                                continue;
+                            }
+                            
+                            // Try update again
+                            result = await supabase.auth.updateUser({ password });
+                            if (!result.error) break;
+                            debugLog('Update after session set failed: ' + result.error.message);
+                        } 
+                        else if (token.type === 'token') {
+                            // Try with OTP verification
+                            debugLog('Verifying with OTP token');
+                            const type = tokenInfo.hashParams.get('type') || 
+                                        tokenInfo.searchParams.get('type') || 'recovery';
+                            
+                            const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+                                token_hash: token.value,
+                                type: type
+                            });
+                            
+                            if (verifyError) {
+                                debugLog('OTP verification failed: ' + verifyError.message);
+                                continue;
+                            }
+                            
+                            // Try update again
+                            result = await supabase.auth.updateUser({ password });
+                            if (!result.error) break;
+                            debugLog('Update after OTP verification failed: ' + result.error.message);
+                        }
                     }
-                    
-                    // Update the password
-                    result = await supabase.auth.updateUser({ password });
-                }
-                // If we have a recovery token
-                else if (recoveryToken) {
-                    console.log('Using recovery token to verify OTP');
-                    
-                    // Verify the token first
-                    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-                        token_hash: recoveryToken,
-                        type: type
-                    });
-                    
-                    if (verifyError) {
-                        throw new Error('Failed to verify token: ' + verifyError.message);
-                    }
-                    
-                    // Update the password
-                    result = await supabase.auth.updateUser({ password });
-                }
-                else {
-                    throw new Error('No valid token found in URL');
                 }
                 
-                // Handle the result
-                if (result && result.error) {
+                // If still error, throw it
+                if (result.error) {
                     throw new Error(result.error.message);
                 }
                 
                 // Success!
-                console.log('Password updated successfully');
+                debugLog('Password update successful!');
                 document.getElementById('resetForm').style.display = 'none';
                 successElement.textContent = 'Your password has been reset successfully! You can now close this window and return to the app to sign in with your new password.';
                 
@@ -255,15 +317,14 @@
             }
         }
 
-        // Initialize and check for token on page load
+        // Initialize on page load
         window.onload = function() {
-            const params = getFragmentParams();
-            const hasAccessToken = params.has('access_token');
-            const hasToken = params.has('token');
+            const tokenInfo = getAllPossibleTokens();
+            debugLog('Tokens in URL: ' + tokenInfo.possibleTokens.length);
             
-            if (!hasAccessToken && !hasToken) {
+            if (tokenInfo.possibleTokens.length === 0) {
                 document.getElementById('resetForm').style.display = 'none';
-                document.getElementById('error').textContent = 'No reset token found. This page should be accessed from a password reset link sent to your email.';
+                document.getElementById('error').textContent = 'No reset token found in URL. This page should be accessed from a password reset link sent to your email.';
             }
         };
     </script>
