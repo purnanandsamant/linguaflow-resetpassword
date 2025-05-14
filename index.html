@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reset Password - LinguaFlow</title>
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -79,7 +79,6 @@
             overflow-y: auto;
             background: rgba(0,0,0,0.3);
             padding: 5px;
-            margin-top: 20px;
         }
         .loader {
             border: 4px solid rgba(255, 255, 255, 0.3);
@@ -100,18 +99,17 @@
 <body>
     <div class="container">
         <h1>Reset Your Password</h1>
+        <div id="statusDisplay" class="error"></div>
         <div id="loading" class="loader"></div>
-        <div id="error" class="error"></div>
-        <div id="success" class="success"></div>
         
         <div id="resetForm">
             <div class="input-group">
                 <label for="password">New Password</label>
-                <input type="password" id="password" placeholder="Enter your new password" />
+                <input type="password" id="password" placeholder="Enter your new password" minlength="6" />
             </div>
             <div class="input-group">
                 <label for="confirmPassword">Confirm Password</label>
-                <input type="password" id="confirmPassword" placeholder="Confirm your new password" />
+                <input type="password" id="confirmPassword" placeholder="Confirm your new password" minlength="6" />
             </div>
             <button class="btn" onclick="resetPassword()">Reset Password</button>
         </div>
@@ -123,208 +121,138 @@
         // Initialize Supabase client
         const SUPABASE_URL = 'https://bzagepvymwyxvohfkzob.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6YWdlcHZ5bXd5eHZvaGZrem9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzAwMjk4NzUsImV4cCI6MTk4NTYwNTg3NX0.SZHqIWKbpDev_QPT2jGiWUqTpBYUqEA7gaI6J2M34cI';
-        
-        // Create the Supabase client correctly
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        // Debug function to display info
-        function debugLog(message) {
-            console.log(message);
-            const debugElement = document.getElementById('debugInfo');
-            debugElement.innerHTML += message + '<br>';
-        }
-
-        // DISPLAY ENTIRE URL FOR DEBUGGING
-        debugLog('Full URL: ' + window.location.href);
-        debugLog('Hash: ' + window.location.hash);
-        debugLog('Search: ' + window.location.search);
         
-        // Try to parse any token from ANY part of the URL
-        function getAllPossibleTokens() {
-            const result = {
-                hashParams: new URLSearchParams(window.location.hash.substring(1)),
-                searchParams: new URLSearchParams(window.location.search),
-                rawUrl: window.location.href,
-                possibleTokens: []
-            };
-            
-            // Check for tokens in hash
-            if (result.hashParams.has('access_token')) {
-                result.possibleTokens.push({
-                    type: 'access_token',
-                    source: 'hash',
-                    value: result.hashParams.get('access_token')
-                });
-            }
-            
-            if (result.hashParams.has('token')) {
-                result.possibleTokens.push({
-                    type: 'token',
-                    source: 'hash',
-                    value: result.hashParams.get('token')
-                });
-            }
-            
-            // Check for tokens in search params
-            if (result.searchParams.has('access_token')) {
-                result.possibleTokens.push({
-                    type: 'access_token',
-                    source: 'search',
-                    value: result.searchParams.get('access_token')
-                });
-            }
-            
-            if (result.searchParams.has('token')) {
-                result.possibleTokens.push({
-                    type: 'token',
-                    source: 'search',
-                    value: result.searchParams.get('token')
-                });
-            }
-            
-            // Look for token in full URL string (sometimes it's embedded differently)
-            const tokenMatch = result.rawUrl.match(/token=([^&]+)/);
-            if (tokenMatch && tokenMatch[1]) {
-                result.possibleTokens.push({
-                    type: 'token',
-                    source: 'raw_url_match',
-                    value: tokenMatch[1]
-                });
-            }
-            
-            return result;
+        const statusDisplay = document.getElementById('statusDisplay');
+        const debugInfo = document.getElementById('debugInfo');
+        
+        // Helper function to log debug info
+        function log(message) {
+            console.log(message);
+            debugInfo.innerHTML += message + '<br>';
         }
-
-        // Reset password function
+        
+        // Extract hash parameters
+        function getHashParams() {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            return params;
+        }
+        
+        // Get specific parameters we need
+        function getTokensFromUrl() {
+            const params = getHashParams();
+            
+            return {
+                access_token: params.get('access_token'),
+                refresh_token: params.get('refresh_token'),
+                type: params.get('type'),
+                expires_in: params.get('expires_in')
+            };
+        }
+        
+        // Function to reset the password
         async function resetPassword() {
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
-            const errorElement = document.getElementById('error');
-            const successElement = document.getElementById('success');
             const loadingElement = document.getElementById('loading');
             
-            // Reset UI states
-            errorElement.textContent = '';
-            successElement.textContent = '';
-            loadingElement.style.display = 'block';
+            // Reset status
+            statusDisplay.textContent = '';
+            statusDisplay.className = 'error';
             
-            // Validate inputs
+            // Validate password
             if (!password) {
-                errorElement.textContent = 'Please enter a new password';
-                loadingElement.style.display = 'none';
+                statusDisplay.textContent = 'Please enter a new password';
                 return;
             }
             
             if (password !== confirmPassword) {
-                errorElement.textContent = 'Passwords do not match';
-                loadingElement.style.display = 'none';
+                statusDisplay.textContent = 'Passwords do not match';
                 return;
             }
             
             if (password.length < 6) {
-                errorElement.textContent = 'Password must be at least 6 characters';
-                loadingElement.style.display = 'none';
+                statusDisplay.textContent = 'Password must be at least 6 characters';
                 return;
             }
             
+            // Show loading
+            loadingElement.style.display = 'block';
+            
             try {
-                // Get all possible tokens and log them for debugging
-                const tokenInfo = getAllPossibleTokens();
-                debugLog('Found ' + tokenInfo.possibleTokens.length + ' possible tokens');
-                tokenInfo.possibleTokens.forEach(token => {
-                    debugLog(`Token type: ${token.type}, source: ${token.source}`);
+                // Get tokens from URL
+                const tokens = getTokensFromUrl();
+                log(`Access token found: ${tokens.access_token ? 'Yes' : 'No'}`);
+                log(`Refresh token found: ${tokens.refresh_token ? 'Yes' : 'No'}`);
+                log(`Type: ${tokens.type || 'Not specified'}`);
+                
+                if (!tokens.access_token) {
+                    throw new Error('No access token found in URL');
+                }
+                
+                // First, establish the session
+                log('Setting session with tokens...');
+                const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+                    access_token: tokens.access_token,
+                    refresh_token: tokens.refresh_token || ''
                 });
                 
-                // First, try to directly update password
-                debugLog('Attempting direct password update...');
-                let result = await supabase.auth.updateUser({ password });
-                
-                if (result.error) {
-                    debugLog('Direct update failed: ' + result.error.message);
-                    
-                    // If direct update fails, try each token
-                    for (const token of tokenInfo.possibleTokens) {
-                        debugLog(`Trying with token of type ${token.type} from ${token.source}`);
-                        
-                        if (token.type === 'access_token') {
-                            // Try setting session with access token
-                            debugLog('Setting session with access token');
-                            const refreshToken = tokenInfo.hashParams.get('refresh_token') || '';
-                            
-                            const { data: session, error: sessionError } = await supabase.auth.setSession({
-                                access_token: token.value,
-                                refresh_token: refreshToken
-                            });
-                            
-                            if (sessionError) {
-                                debugLog('Session set failed: ' + sessionError.message);
-                                continue;
-                            }
-                            
-                            // Try update again
-                            result = await supabase.auth.updateUser({ password });
-                            if (!result.error) break;
-                            debugLog('Update after session set failed: ' + result.error.message);
-                        } 
-                        else if (token.type === 'token') {
-                            // Try with OTP verification
-                            debugLog('Verifying with OTP token');
-                            const type = tokenInfo.hashParams.get('type') || 
-                                        tokenInfo.searchParams.get('type') || 'recovery';
-                            
-                            const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
-                                token_hash: token.value,
-                                type: type
-                            });
-                            
-                            if (verifyError) {
-                                debugLog('OTP verification failed: ' + verifyError.message);
-                                continue;
-                            }
-                            
-                            // Try update again
-                            result = await supabase.auth.updateUser({ password });
-                            if (!result.error) break;
-                            debugLog('Update after OTP verification failed: ' + result.error.message);
-                        }
-                    }
+                if (sessionError) {
+                    log('Session error: ' + sessionError.message);
+                    throw new Error('Error setting session: ' + sessionError.message);
                 }
                 
-                // If still error, throw it
-                if (result.error) {
-                    throw new Error(result.error.message);
+                log('Session established successfully!');
+                
+                // Now update the password
+                log('Updating password...');
+                const { data, error } = await supabase.auth.updateUser({
+                    password: password
+                });
+                
+                if (error) {
+                    log('Password update error: ' + error.message);
+                    throw new Error('Error updating password: ' + error.message);
                 }
                 
-                // Success!
-                debugLog('Password update successful!');
+                log('Password updated successfully!');
+                
+                // Show success
+                statusDisplay.textContent = 'Password reset successful! You can now return to the app and log in with your new password.';
+                statusDisplay.className = 'success';
                 document.getElementById('resetForm').style.display = 'none';
-                successElement.textContent = 'Your password has been reset successfully! You can now close this window and return to the app to sign in with your new password.';
                 
                 // Add a return to app button
                 const returnButton = document.createElement('button');
                 returnButton.className = 'btn';
                 returnButton.textContent = 'Return to App';
+                returnButton.style.marginTop = '20px';
                 returnButton.onclick = function() {
                     window.location.href = 'languagetranslator23://auth/reset-success';
                 };
-                successElement.parentNode.appendChild(returnButton);
+                
+                statusDisplay.parentNode.insertBefore(returnButton, statusDisplay.nextSibling);
                 
             } catch (error) {
-                console.error('Error resetting password:', error);
-                errorElement.textContent = error.message || 'An error occurred. Please try again.';
+                console.error('Error:', error);
+                statusDisplay.textContent = error.message;
             } finally {
                 loadingElement.style.display = 'none';
             }
         }
-
-        // Initialize on page load
+        
+        // Initialize page
         window.onload = function() {
-            const tokenInfo = getAllPossibleTokens();
-            debugLog('Tokens in URL: ' + tokenInfo.possibleTokens.length);
+            const tokens = getTokensFromUrl();
             
-            if (tokenInfo.possibleTokens.length === 0) {
+            if (!tokens.access_token) {
+                statusDisplay.textContent = 'No access token found in URL. Please use the reset link from your email.';
                 document.getElementById('resetForm').style.display = 'none';
-                document.getElementById('error').textContent = 'No reset token found in URL. This page should be accessed from a password reset link sent to your email.';
+            } else {
+                log('URL contains necessary tokens for password reset');
+                statusDisplay.textContent = 'Ready to reset your password';
+                statusDisplay.className = 'success';
             }
         };
     </script>
