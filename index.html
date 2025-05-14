@@ -1,80 +1,269 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Reset Password</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-  <script>
-    // Initialize Supabase client
-    const supabaseUrl = 'https://bzagepvymwyxvohfkzob.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6YWdlcHZ5bXd5eHZvaGZrem9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI0NzkwODAsImV4cCI6MjA1ODA1NTA4MH0.CboeMGJ8j8g7UPBATJctyLDA03vw7ppn3aYViTlYLbg'; // Your public anon key
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-
-    // Extract token from URL
-    const params = new URLSearchParams(window.location.hash.substring(1));
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const type = params.get('type');
-    
-    async function resetPassword() {
-      const password = document.getElementById('password').value;
-      const confirmPassword = document.getElementById('confirmPassword').value;
-      
-      if (password !== confirmPassword) {
-        alert('Passwords do not match');
-        return;
-      }
-      
-      if (accessToken) {
-        try {
-          // Set the session first
-          await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken
-          });
-          
-          // Then update the password
-          const { error } = await supabase.auth.updateUser({
-            password: password
-          });
-          
-          if (error) {
-            document.getElementById('error').textContent = error.message;
-          } else {
-            document.getElementById('success').style.display = 'block';
-            document.getElementById('resetForm').style.display = 'none';
-          }
-        } catch (err) {
-          document.getElementById('error').textContent = err.message;
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Password - LinguaFlow</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
-      } else {
-        document.getElementById('error').textContent = 'No reset token found in URL';
-      }
-    }
-    
-    function openApp() {
-      window.location.href = 'languagetranslator23://auth';
-    }
-  </script>
+        .container {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 30px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h1 {
+            margin-top: 0;
+            color: #FFDD00;
+        }
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background-color: #FFDD00;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 20px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .error {
+            color: #ff5252;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .success {
+            color: #4CAF50;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid #FFDD00;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-  <div id="resetForm">
-    <h1>Reset Your Password</h1>
-    <div id="error" style="color: red;"></div>
-    <div>
-      <label for="password">New Password:</label>
-      <input type="password" id="password" />
+    <div class="container">
+        <h1>Reset Your Password</h1>
+        <div id="loading" class="loader"></div>
+        <div id="error" class="error"></div>
+        <div id="success" class="success"></div>
+        
+        <div id="resetForm">
+            <div class="input-group">
+                <label for="password">New Password</label>
+                <input type="password" id="password" placeholder="Enter your new password" />
+            </div>
+            <div class="input-group">
+                <label for="confirmPassword">Confirm Password</label>
+                <input type="password" id="confirmPassword" placeholder="Confirm your new password" />
+            </div>
+            <button class="btn" onclick="resetPassword()">Reset Password</button>
+        </div>
     </div>
-    <div>
-      <label for="confirmPassword">Confirm Password:</label>
-      <input type="password" id="confirmPassword" />
-    </div>
-    <button onclick="resetPassword()">Reset Password</button>
-  </div>
-  
-  <div id="success" style="display: none;">
-    <h1>Password Reset Successful!</h1>
-    <p>Your password has been reset successfully.</p>
-    <button onclick="openApp()">Return to App</button>
-  </div>
+
+    <script>
+        // Initialize Supabase client
+        const SUPABASE_URL = 'https://bzagepvymwyxvohfkzob.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6YWdlcHZ5bXd5eHZvaGZrem9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE2NzAwMjk4NzUsImV4cCI6MTk4NTYwNTg3NX0.SZHqIWKbpDev_QPT2jGiWUqTpBYUqEA7gaI6J2M34cI';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Extract token from URL hash or query params
+        function getTokenFromUrl() {
+            // First, try to get it from hash fragment
+            const hash = window.location.hash.substring(1);
+            if (hash) {
+                const params = new URLSearchParams(hash);
+                // Check for access_token in hash
+                if (params.has('access_token')) {
+                    console.log('Found access_token in hash fragment');
+                    return {
+                        access_token: params.get('access_token'),
+                        refresh_token: params.get('refresh_token') || '',
+                        type: params.get('type') || 'recovery'
+                    };
+                }
+            }
+            
+            // Then try from query parameters
+            const queryParams = new URLSearchParams(window.location.search);
+            if (queryParams.has('token')) {
+                console.log('Found token in query parameters');
+                return {
+                    token: queryParams.get('token'),
+                    type: queryParams.get('type') || 'recovery'
+                };
+            }
+            
+            // If not found, return empty
+            return null;
+        }
+
+        // Validate password
+        function validatePassword(password) {
+            // Minimum 8 characters, at least one letter and one number
+            const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+            return passwordRegex.test(password);
+        }
+
+        // Reset password
+        async function resetPassword() {
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const errorElement = document.getElementById('error');
+            const successElement = document.getElementById('success');
+            const resetForm = document.getElementById('resetForm');
+            const loadingElement = document.getElementById('loading');
+            
+            // Clear previous messages
+            errorElement.textContent = '';
+            successElement.textContent = '';
+            
+            // Validate password
+            if (!password) {
+                errorElement.textContent = 'Please enter a new password';
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                errorElement.textContent = 'Passwords do not match';
+                return;
+            }
+            
+            if (!validatePassword(password)) {
+                errorElement.textContent = 'Password must be at least 8 characters long and contain at least one letter and one number';
+                return;
+            }
+            
+            // Show loading
+            loadingElement.style.display = 'block';
+            
+            try {
+                // Get token from URL
+                const tokenData = getTokenFromUrl();
+                
+                if (!tokenData) {
+                    errorElement.textContent = 'No reset token found. Please request a new password reset link.';
+                    loadingElement.style.display = 'none';
+                    return;
+                }
+                
+                console.log('Using token type:', tokenData.type || 'recovery');
+                console.log('Token found:', !!tokenData.access_token || !!tokenData.token);
+                
+                let result;
+                
+                // If we have access_token, we need to set session first
+                if (tokenData.access_token) {
+                    console.log('Setting session with access token');
+                    // Set the session first
+                    const { data: session, error: sessionError } = await supabase.auth.setSession({
+                        access_token: tokenData.access_token,
+                        refresh_token: tokenData.refresh_token || ''
+                    });
+                    
+                    if (sessionError) {
+                        throw new Error('Error setting session: ' + sessionError.message);
+                    }
+                    
+                    // Then update the password
+                    result = await supabase.auth.updateUser({ password });
+                } else if (tokenData.token) {
+                    // If we have a recovery token, verify it first
+                    console.log('Verifying recovery token');
+                    const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+                        token_hash: tokenData.token,
+                        type: tokenData.type || 'recovery'
+                    });
+                    
+                    if (verifyError) {
+                        throw new Error('Error verifying token: ' + verifyError.message);
+                    }
+                    
+                    // Then update the password
+                    result = await supabase.auth.updateUser({ password });
+                }
+                
+                // Handle result
+                if (result && result.error) {
+                    throw new Error(result.error.message);
+                }
+                
+                // Success!
+                successElement.textContent = 'Password reset successful! You can now log in with your new password.';
+                resetForm.style.display = 'none';
+                
+                // Add a button to return to the app
+                const returnButton = document.createElement('button');
+                returnButton.className = 'btn';
+                returnButton.textContent = 'Return to App';
+                returnButton.onclick = function() {
+                    window.location.href = 'languagetranslator23://auth/reset-success';
+                };
+                
+                successElement.parentNode.appendChild(returnButton);
+                
+            } catch (error) {
+                console.error('Error during password reset:', error);
+                errorElement.textContent = error.message || 'An error occurred during password reset. Please try again.';
+            } finally {
+                loadingElement.style.display = 'none';
+            }
+        }
+        
+        // Display an appropriate message if the page is loaded without a token
+        window.onload = function() {
+            const tokenData = getTokenFromUrl();
+            if (!tokenData) {
+                document.getElementById('error').textContent = 'No reset token found. This page should be accessed via a password reset link sent to your email.';
+                document.getElementById('resetForm').style.display = 'none';
+            } else {
+                console.log('Token found, ready to process password reset');
+            }
+        };
+    </script>
 </body>
 </html>
